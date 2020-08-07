@@ -17,17 +17,19 @@ import (
 
 type MessageBody struct {
 	id string
+	MessageID string
 	FirstName string
 	Username string
 	Text string
+	Time string
 }
 
 func main() {
-
+	fmt.Print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 	go telegram()
 
 	ctx := context.Background()
-	sa := option.WithCredentialsFile("/home/kuppuch/GoLangProject/test-e9d05-firebase-adminsdk-r03nj-4e1eaf4351.json")
+	sa := option.WithCredentialsFile("/home/kuppuch/GoLangProject/test-e9d05-firebase-adminsdk-r03nj-409a98c114.json")
 	conf := &fb.Config{ProjectID: "test-e9d05"}
 	app, err := fb.NewApp(ctx, conf, sa)
 	if err != nil {
@@ -41,7 +43,7 @@ func main() {
 	}
 	defer client.Close()
 
-
+	body := MessageBody{}
 
 	for {
 		fmt.Println("1 - Вывести все записи")
@@ -55,9 +57,9 @@ func main() {
 		case "1":
 			getAll(client, ctx)
 		case "2":
-			update(client, ctx)
+			update(client, ctx, body)
 		case "3":
-			create(client, ctx)
+			create(client, ctx, body)
 		case "4":
 			fmt.Println("Bye ...")
 			return
@@ -85,30 +87,25 @@ func getAll(client *firestore.Client, ctx context.Context) {
 	}
 }
 
-func update(client *firestore.Client, ctx context.Context) {
-	getAll(client, ctx)
-}
 
-func updateT(client *firestore.Client, ctx context.Context, body MessageBody) {
-	getAll(client, ctx)
-}
-
-func create(client *firestore.Client, ctx context.Context) {
-	/*_, _, err := client.Collection("users").Add(ctx, map[string]interface{}{
-		"FirstName":  "Alan",
-		"Username": "Walker",
-		"Text":   "Darkside",
-		"id":   2000,
+func update(client *firestore.Client, ctx context.Context, body MessageBody) {
+	_, err := client.Collection("users/" + body.id +"/message").Doc(body.MessageID).Set(ctx, map[string]interface{} {
+		"time":  body.Time,
+		"text": body.Text,
 	})
+
 	if err != nil {
-		log.Fatalf("Failed adding aturing: %v", err)
-	}*/
-	_, err := client.Collection("users").Doc("LA").Set(ctx, map[string]interface{}{
-		"FirstName":  "Some",
-		"Username": "Pes",
-		"Text":   "Awesome",
-		"id":   1990,
+		// Handle any errors in an appropriate way, such as returning them.
+		log.Printf("An error has occurred: %s", err)
+	}
+}
+
+func create(client *firestore.Client, ctx context.Context, body MessageBody) {
+	_, err := client.Collection("users").Doc(body.id).Set(ctx, map[string]interface{} {
+		"FirstName":  body.FirstName,
+		"Username": body.Username,
 	})
+
 	if err != nil {
 		// Handle any errors in an appropriate way, such as returning them.
 		log.Printf("An error has occurred: %s", err)
@@ -135,26 +132,67 @@ func telegram() {
 			continue
 		}
 
-		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
+		//log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
+
+		body := MessageBody{}
+		body.id = strconv.Itoa(update.Message.From.ID)
+		body.MessageID = strconv.Itoa(update.Message.MessageID)
+		body.FirstName = update.Message.From.FirstName
+		body.Username = update.Message.From.UserName
+		body.Text = update.Message.Text
+		body.Time = strconv.Itoa(update.Message.Date)
 
 		switch strings.ToLower(update.Message.Command()) {
 		case "start":
+			initCommand("create", body)
 			reply = "Привет, данная версия бота написана с использованием библиотеки tgbotapi на golang"
 		case "hello":
+			initCommand("update", body)
 			reply = "world"
 
+		}
+
+		switch strings.ToLower(update.Message.Text) {
+		case "не знаю что сказать":
+			initCommand("update", body)
+			reply = "Да"
+		case "не знаешь что сказать":
+			initCommand("update", body)
+			reply = "Именно"
+		default:
+			initCommand("update", body)
 		}
 
 		msg := tg.NewMessage(update.Message.Chat.ID, reply)
 		bot.Send(msg)
 
-		body := MessageBody{}
-		body.id = strconv.Itoa(update.Message.From.ID)
-		body.FirstName = update.Message.From.FirstName
-		body.Username = update.Message.From.UserName
-		body.Text = update.Message.Text
-
-
-		//log.Panic(body.id, "AAAAAAAAAAAAAAAAAAAAAAA")
 	}
+}
+
+func initCommand(command string, body MessageBody) {
+
+	ctx := context.Background()
+	sa := option.WithCredentialsFile("/home/kuppuch/GoLangProject/test-e9d05-firebase-adminsdk-r03nj-409a98c114.json")
+	conf := &fb.Config{ProjectID: "test-e9d05"}
+	app, err := fb.NewApp(ctx, conf, sa)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	client, err := app.Firestore(ctx)
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer client.Close()
+
+	switch command {
+	case "create":
+		create(client, ctx, body)
+		update(client, ctx, body)
+	case "update":
+		update(client, ctx, body)
+
+	}
+
 }
